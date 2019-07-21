@@ -5,6 +5,7 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <virtuabotixRTC.h>
+#include <EEPROM.h>
 
 #define button 14
 #define led 4
@@ -13,11 +14,11 @@ virtuabotixRTC myRTC(12, 15, 13);
 
 // Units are hours
 unsigned int start_hours_size = 2;
-int start_hours[8] = {20,21,0,0,0,0,0,0};
+int start_hours[8] = {19,20,0,0,0,0,0,0};
 
 // Initialize Wifi connection to the router
-char ssid[] = "ESSID";     // your network SSID (name)
-char password[] = "PASSWORD"; // your network key
+char ssid[] = "YOUR_WIFI_SSID";     // your network SSID (name)
+char password[] = "YOUR_WIFI_PASSWORD"; // your network key
 WiFiClientSecure client;
 
 // System vars
@@ -30,20 +31,19 @@ unsigned int is_on_manual = 0;
 unsigned int is_on_timer = 0;
 unsigned int is_on_remote = 0;
 
-
 /*
  * 
  * Telegram Bot section
  * 
  */
 // Initialize Telegram BOT
-#define BOTtoken "TELEGRAM_BOT_TOKEN"  // your Bot Token (Get from Botfather)
+#define BOTtoken "YOUR_TELGRAM_BOT_TOKEN" // your Bot Token (Get from Botfather)
 
 UniversalTelegramBot bot(BOTtoken, client);
 int Bot_mtbs = 10000; //mean time between scan messages
 long Bot_lasttime;   //last time messages' scan has been done
 bool Start = false;
-String telegram_password = "A_PASSWORD_TO_AUTHENTICATE";
+String telegram_password = "YOUR_CUSTOM_AUTH_PASSWORD";
 String allowed_chats[32];
 unsigned int allowed_chats_index = 0;
 
@@ -135,6 +135,7 @@ void handleNewMessages(int numNewMessages) {
               }
             }
           }
+          save_hours();
           bot.sendMessage(chat_id, "OK set timer", "");
       }
       
@@ -263,7 +264,6 @@ String getTime() {
   return cdata;
 }
 
-
 void setRTC() {
   String t = getTime();
   unsigned int h = split(t,':',0).toInt();
@@ -272,12 +272,7 @@ void setRTC() {
   myRTC.setDS1302Time(s, m, h, 5, 3, 8, 2018);
 }
 
-/*
- * 
- * OTA Over-The-Air section
- * 
- */
-
+// OTA Over-The-Air section 
 void set_ota() {
     ArduinoOTA.onStart([]() {
     Serial.println("Start OTA");
@@ -302,12 +297,24 @@ void set_ota() {
   Serial.println(WiFi.localIP());
 }
 
+// DATA_SIZE|VAL1|VAL2...
+void save_hours() {
+    EEPROM.write(0, start_hours_size);
+  for(int addr=1; addr <= start_hours_size; addr++) {
+    EEPROM.write(addr, start_hours[addr-1]);
+  }
+  EEPROM.commit();
+}
 
-/*
- * 
- * Water pump control
- * 
- */
+void read_hours() {
+   start_hours_size = EEPROM.read(0);
+   for(int addr=1; addr <= start_hours_size; addr++) {
+    start_hours[addr-1] = EEPROM.read(addr);
+   }
+}
+
+
+// Water pump control
 void pump_control() {
   sw_last_last = sw_last;
   sw_last = sw;
@@ -459,9 +466,16 @@ void setup() {
   udp.begin(localPort);
   Serial.print("Local port: ");
   Serial.println(udp.localPort());
+  
+  // FLASH for saving hours
+  EEPROM.begin(9);
+  read_hours();
 
   // OTA
   set_ota();
+
+  // Set initial time
+  setRTC();
 }
 
 void loop() {
